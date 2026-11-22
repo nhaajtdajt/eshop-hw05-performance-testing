@@ -1,0 +1,566 @@
+<?xml version='1.0' encoding='utf-8'?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="23120231_Load_20261121" enabled="true">
+      <stringProp name="TestPlan.comments">Flow 3 on the local EShop fixture. Reopen each scenario's CSV JTL in its report view.</stringProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Variables">
+        <collectionProp name="Arguments.arguments" />
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers" enabled="true">
+        <collectionProp name="HeaderManager.headers">
+          <elementProp name="" elementType="Header">
+            <stringProp name="Header.name">Content-Type</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp>
+          <elementProp name="" elementType="Header">
+            <stringProp name="Header.name">Accept</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp>
+        </collectionProp>
+      </HeaderManager>
+      <hashTree />
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="steady" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Workflow loop">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(steady_users,8)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(steady_ramp,8)}</stringProp>
+        <stringProp name="ThreadGroup.duration">${__P(steady_seconds,65)}</stringProp>
+        <stringProp name="ThreadGroup.delay">${__P(steady_delay,0)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="flow_03" enabled="true">
+          <boolProp name="TransactionController.parent">false</boolProp>
+          <boolProp name="TransactionController.includeTimers">false</boolProp>
+        </TransactionController>
+        <hashTree>
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="01_forgot_password" enabled="true">
+            <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+            <stringProp name="HTTPSampler.port">3000</stringProp>
+            <stringProp name="HTTPSampler.protocol">http</stringProp>
+            <stringProp name="HTTPSampler.path">/api/forgot-password</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+            <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                  <stringProp name="Argument.value">{"email":"${email}"}</stringProp>
+                  <stringProp name="Argument.metadata">=</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Pick CSV row once per virtual user" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters" />
+              <stringProp name="filename" />
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import org.apache.jmeter.services.FileServer
+vars.put('flow_ok', 'true')
+['resetToken', 'jwt', 'orderId', 'productName', 'productPrice', 'total'].each { vars.remove(it) }
+if (vars.get('email') == null) {
+    def base = new File(FileServer.getFileServer().getBaseDir())
+    def csv = new File(base, '../data/test-users.csv')
+    def lines = csv.readLines('UTF-8')
+    int row = ctx.getThreadNum() + 0 + 1
+    if (row &gt;= lines.size()) throw new IllegalArgumentException('Insufficient fixture rows for this group')
+    def columns = lines[0].split(',', -1)
+    def values = lines[row].split(',', -1)
+    if (columns.length != values.length) throw new IllegalArgumentException('Invalid fixture CSV row')
+    columns.eachWithIndex { column, index -&gt; vars.put(column, values[index]) }
+}
+</stringProp>
+            </JSR223PreProcessor>
+            <hashTree />
+            <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Pause before next workflow" enabled="true">
+              <stringProp name="ConstantTimer.delay">${__P(think_min_ms,700)}</stringProp>
+              <stringProp name="RandomTimer.range">${__P(think_jitter_ms,600)}</stringProp>
+            </UniformRandomTimer>
+            <hashTree />
+            <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+              <stringProp name="scriptLanguage">groovy</stringProp>
+              <stringProp name="parameters" />
+              <stringProp name="filename" />
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.resetToken?.toString() ==~ /[0-9]{4,6}/; vars.put('resetToken', data.resetToken.toString())
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+            </JSR223Assertion>
+            <hashTree />
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="02_reset_password" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/reset-password</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{"email":"${email}","resetToken":"${resetToken}","newPassword":"${newPassword}"}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.message == 'Password reset successfully'
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="03_login" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/login</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{"email":"${email}","password":"${newPassword}"}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.user?.email == vars.get('email'); assert data.token; vars.put('jwt', data.token.toString())
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="04_categories" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/categories</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments" />
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data instanceof List; assert data.any { it.id?.toString() == vars.get('categoryId') }
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="05_products" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/products</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments" />
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data instanceof List
+def product = data.find { it.id?.toString() == vars.get('productId') &amp;&amp; it.category_id?.toString() == vars.get('categoryId') }
+assert product?.name &amp;&amp; product?.price instanceof Number
+vars.put('productName', groovy.json.JsonOutput.toJson(product.name))
+vars.put('productPrice', product.price.toString())
+vars.put('total', (product.price * vars.get('quantity').toInteger()).toString())
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="06_add_to_cart" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/cart</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{"id":${productId},"name":${productName},"price":${productPrice},"quantity":${quantity}}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Authorization</stringProp>
+                    <stringProp name="Header.value">Bearer ${jwt}</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.message == 'Added to cart'
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="07_checkout" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/checkout</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{"total_amount":${total},"shipping_address":"${shippingAddress}"}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Authorization</stringProp>
+                    <stringProp name="Header.value">Bearer ${jwt}</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.message == 'Checkout successful'; assert data.orderId instanceof Number &amp;&amp; data.orderId &gt; 0; vars.put('orderId', data.orderId.toString())
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="08_cancel" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/orders/${orderId}/cancel</stringProp>
+              <stringProp name="HTTPSampler.method">PUT</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments" />
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Authorization</stringProp>
+                    <stringProp name="Header.value">Bearer ${jwt}</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.message == 'Order canceled successfully'
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Continue after successful step" enabled="true">
+            <stringProp name="IfController.condition">${flow_ok}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+            <boolProp name="IfController.useExpression">true</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="09_verify_cancel" enabled="true">
+              <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+              <stringProp name="HTTPSampler.port">3000</stringProp>
+              <stringProp name="HTTPSampler.protocol">http</stringProp>
+              <stringProp name="HTTPSampler.path">/api/orders/${orderId}</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.connect_timeout">2000</stringProp>
+              <stringProp name="HTTPSampler.response_timeout">5000</stringProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments" />
+              </elementProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Authorization</stringProp>
+                    <stringProp name="Header.value">Bearer ${jwt}</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree />
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Validate response and pass workflow data" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters" />
+                <stringProp name="filename" />
+                <stringProp name="cacheKey">true</stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper
+try {
+    assert prev.getResponseCode() == '200'
+    def data = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    assert data.id?.toString() == vars.get('orderId'); assert data.status == 'canceled'; assert data.total_amount?.toString() == vars.get('total')
+} catch (AssertionError | Exception failure) {
+    vars.put('flow_ok', 'false')
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage('Flow step failed: ' + prev.getSampleLabel() + ' (HTTP ' + prev.getResponseCode() + ')')
+}
+</stringProp>
+              </JSR223Assertion>
+              <hashTree />
+            </hashTree>
+          </hashTree>
+        </hashTree>
+      </hashTree>
+      <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="Summary Report" enabled="false">
+        <boolProp name="ResultCollector.error_logging">false</boolProp>
+        <stringProp name="filename" />
+        <objProp>
+          <name>saveConfig</name>
+          <value class="SampleSaveConfiguration">
+            <time>true</time>
+            <latency>true</latency>
+            <timestamp>true</timestamp>
+            <success>true</success>
+            <label>true</label>
+            <code>true</code>
+            <message>true</message>
+            <threadName>true</threadName>
+            <assertions>true</assertions>
+            <subresults>true</subresults>
+            <fieldNames>true</fieldNames>
+            <bytes>true</bytes>
+            <sentBytes>true</sentBytes>
+            <threadCounts>true</threadCounts>
+            <connectTime>true</connectTime>
+          </value>
+        </objProp>
+      </ResultCollector>
+      <hashTree />
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
